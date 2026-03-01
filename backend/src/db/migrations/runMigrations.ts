@@ -6,6 +6,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import { getPool } from "../client";
+import "dotenv/config";
 
 const MIGRATIONS_DIR = join(__dirname);
 

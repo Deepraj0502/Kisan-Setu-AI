@@ -1,7 +1,13 @@
 import express from "express";
 import cors from "cors";
 import { getMockAnswer } from "./services/mockKnowledgeBase";
-import { checkEligibilityForAllSchemes, getMockFarmerProfile, type FarmerLandRecord } from "./services/sarkariMitraService";
+import {
+  checkEligibilityForAllSchemes,
+  getMockFarmerProfile,
+  type FarmerLandRecord
+} from "./services/sarkariMitraService";
+import { performRAGQuery } from "./services/rag/ragService";
+import "dotenv/config";
 
 const app = express();
 
@@ -30,15 +36,38 @@ app.post("/agent/query", async (req, res) => {
   }
 
   const lang: "mr" | "hi" | "en" = language || "en";
+  const trimmedQuestion = question.trim();
+  const useRag = process.env.USE_BEDROCK_RAG === "true";
 
-  // For now, always use mock KB. Later we can switch to real RAG when AWS is ready.
-  const answer = getMockAnswer(question.trim(), lang);
+  if (useRag) {
+    try {
+      const ragResult = await performRAGQuery({
+        question: trimmedQuestion,
+        language: lang
+      });
 
-  res.json({
+      return res.json({
+        answer: ragResult.answer,
+        metadata: {
+          ...(ragResult.metadata || {}),
+          engine: "bedrock-rag",
+          language: lang,
+          context_count: ragResult.retrieved_contexts.length
+        }
+      });
+    } catch (error) {
+      console.error("RAG query failed, falling back to mock KB:", error);
+      // Fall through to mock KB below
+    }
+  }
+
+  const answer = getMockAnswer(trimmedQuestion, lang);
+
+  return res.json({
     answer,
     metadata: {
       language: lang,
-      engine: "mock-knowledge-base"
+      engine: useRag ? "mock-fallback" : "mock-knowledge-base"
     }
   });
 });

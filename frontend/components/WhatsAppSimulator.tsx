@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { SoilCardSample } from "./SoilCardSample";
 
 type Sender = "farmer" | "agent";
@@ -62,7 +63,15 @@ interface DemoStep {
   action?: "sarkari-mitra";
 }
 
-export function WhatsAppSimulator() {
+export interface WhatsAppSimulatorProps {
+  /** "embedded" = card in console; "fullscreen" = full-screen Web/Mobile layout */
+  variant?: "embedded" | "fullscreen";
+}
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+
+export function WhatsAppSimulator({ variant = "embedded" }: WhatsAppSimulatorProps) {
   const [input, setInput] = useState("");
   const [language, setLanguage] = useState<"mr" | "hi" | "en">("mr");
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -90,8 +99,12 @@ export function WhatsAppSimulator() {
   const [sarkariAadhaar, setSarkariAadhaar] = useState<"yes" | "no">("yes");
   const [nextId, setNextId] = useState(3);
   const [isDemoRunning, setIsDemoRunning] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [canUseSpeech, setCanUseSpeech] = useState(false);
   const demoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<any | null>(null);
+  const pathname = usePathname();
 
   function addMessage(partial: Omit<ChatMessage, "id">) {
     setMessages((prev) => [...prev, { id: nextId, ...partial }]);
@@ -115,14 +128,14 @@ export function WhatsAppSimulator() {
       language === "mr"
         ? `🏛️ माझ्यासाठी कोणत्या सरकारी योजना लागू होतील? (राज्य: ${sarkariState}, जमीन: ${landSizeHectares} ha)`
         : language === "hi"
-        ? `🏛️ मेरे लिए कौन-कौन सी सरकारी योजनाएं लागू होंगी? (राज्य: ${sarkariState}, जमीन: ${landSizeHectares} ha)`
-        : `🏛️ Which government schemes am I eligible for? (State: ${sarkariState}, land: ${landSizeHectares} ha)`;
+          ? `🏛️ मेरे लिए कौन-कौन सी सरकारी योजनाएं लागू होंगी? (राज्य: ${sarkariState}, जमीन: ${landSizeHectares} ha)`
+          : `🏛️ Which government schemes am I eligible for? (State: ${sarkariState}, land: ${landSizeHectares} ha)`;
 
     addMessage({ sender: "farmer", text: farmerText, kind: "text" });
     setCheckingSchemes(true);
 
     try {
-      const res = await fetch("http://localhost:4000/agent/sarkari-mitra", {
+      const res = await fetch(`${API_BASE_URL}/agent/sarkari-mitra`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -153,8 +166,8 @@ export function WhatsAppSimulator() {
           language === "mr"
             ? "सध्या तुमच्यासाठी कोणतीही योजना पात्र दिसत नाही. कृपया स्थानिक कृषी अधिकारीशी संपर्क करा."
             : language === "hi"
-            ? "अभी आपके लिए कोई योजना पात्र नहीं दिख रही है। कृपया नज़दीकी कृषि अधिकारी से संपर्क करें।"
-            : "Currently no schemes appear eligible for your profile. Please contact your local agriculture officer.";
+              ? "अभी आपके लिए कोई योजना पात्र नहीं दिख रही है। कृपया नज़दीकी कृषि अधिकारी से संपर्क करें।"
+              : "Currently no schemes appear eligible for your profile. Please contact your local agriculture officer.";
 
         addMessage({
           sender: "agent",
@@ -168,8 +181,8 @@ export function WhatsAppSimulator() {
         language === "mr"
           ? "🏛️ सरकारी-मित्रने तुमच्यासाठी काही योजना निवडल्या आहेत:"
           : language === "hi"
-          ? "🏛️ सरकारी-मित्र ने आपके लिए कुछ योजनाएं चुनी हैं:"
-          : "🏛️ Sarkari-Mitra has found some schemes for you:";
+            ? "🏛️ सरकारी-मित्र ने आपके लिए कुछ योजनाएं चुनी हैं:"
+            : "🏛️ Sarkari-Mitra has found some schemes for you:";
 
       const lines: string[] = [headerText, ""];
 
@@ -179,8 +192,8 @@ export function WhatsAppSimulator() {
           language === "mr"
             ? s.name_marathi || s.name_english
             : language === "hi"
-            ? s.name_hindi || s.name_english
-            : s.name_english;
+              ? s.name_hindi || s.name_english
+              : s.name_english;
 
         lines.push(
           `${idx + 1}) ${name} (${s.scheme_code}) — ${item.eligibility_score}%`
@@ -191,8 +204,8 @@ export function WhatsAppSimulator() {
             language === "mr"
               ? `   लाभ: ${s.benefits_summary}`
               : language === "hi"
-              ? `   लाभ: ${s.benefits_summary}`
-              : `   Benefits: ${s.benefits_summary}`
+                ? `   लाभ: ${s.benefits_summary}`
+                : `   Benefits: ${s.benefits_summary}`
           );
         }
 
@@ -202,8 +215,8 @@ export function WhatsAppSimulator() {
             language === "mr"
               ? `   कारणे: ${reasonsText}`
               : language === "hi"
-              ? `   कारण: ${reasonsText}`
-              : `   Why: ${reasonsText}`
+                ? `   कारण: ${reasonsText}`
+                : `   Why: ${reasonsText}`
           );
         }
 
@@ -214,8 +227,8 @@ export function WhatsAppSimulator() {
             language === "mr"
               ? `   पुढील पाऊल: ${firstStep.title}`
               : language === "hi"
-              ? `   अगला कदम: ${firstStep.title}`
-              : `   Next step: ${firstStep.title}`
+                ? `   अगला कदम: ${firstStep.title}`
+                : `   Next step: ${firstStep.title}`
           );
         }
 
@@ -226,8 +239,8 @@ export function WhatsAppSimulator() {
         language === "mr"
           ? "ℹ️ अधिकृत माहिती व अर्जासाठी नेहमी सरकारी पोर्टलचा वापर करा."
           : language === "hi"
-          ? "ℹ️ आधिकारिक जानकारी और आवेदन के लिए हमेशा सरकारी पोर्टल का उपयोग करें।"
-          : "ℹ️ For official details and application, always use the government portal.";
+            ? "ℹ️ आधिकारिक जानकारी और आवेदन के लिए हमेशा सरकारी पोर्टल का उपयोग करें।"
+            : "ℹ️ For official details and application, always use the government portal.";
 
       lines.push(footer);
 
@@ -242,8 +255,8 @@ export function WhatsAppSimulator() {
         language === "mr"
           ? "सध्या योजना तपासणी सेवा उपलब्ध नाही. कृपया नंतर पुन्हा प्रयत्न करा."
           : language === "hi"
-          ? "अभी योजना जांच सेवा उपलब्ध नहीं है। कृपया बाद में पुनः प्रयास करें।"
-          : "Scheme eligibility service is not available right now. Please try again later.";
+            ? "अभी योजना जांच सेवा उपलब्ध नहीं है। कृपया बाद में पुनः प्रयास करें।"
+            : "Scheme eligibility service is not available right now. Please try again later.";
 
       addMessage({
         sender: "agent",
@@ -266,8 +279,8 @@ export function WhatsAppSimulator() {
       language === "mr"
         ? `🏛️ माझ्यासाठी कोणत्या सरकारी योजना लागू होतील? (राज्य: ${demoState}, जमीन: ${landSizeHectares} ha)`
         : language === "hi"
-        ? `🏛️ मेरे लिए कौन-कौन सी सरकारी योजनाएं लागू होंगी? (राज्य: ${demoState}, जमीन: ${landSizeHectares} ha)`
-        : `🏛️ Which government schemes am I eligible for? (State: ${demoState}, land: ${landSizeHectares} ha)`;
+          ? `🏛️ मेरे लिए कौन-कौन सी सरकारी योजनाएं लागू होंगी? (राज्य: ${demoState}, जमीन: ${landSizeHectares} ha)`
+          : `🏛️ Which government schemes am I eligible for? (State: ${demoState}, land: ${landSizeHectares} ha)`;
 
     addMessage({ sender: "farmer", text: farmerText, kind: "text" });
     setCheckingSchemes(true);
@@ -304,8 +317,8 @@ export function WhatsAppSimulator() {
           language === "mr"
             ? "सध्या तुमच्यासाठी कोणतीही योजना पात्र दिसत नाही. कृपया स्थानिक कृषी अधिकारीशी संपर्क करा."
             : language === "hi"
-            ? "अभी आपके लिए कोई योजना पात्र नहीं दिख रही है। कृपया नज़दीकी कृषि अधिकारी से संपर्क करें।"
-            : "Currently no schemes appear eligible for your profile. Please contact your local agriculture officer.";
+              ? "अभी आपके लिए कोई योजना पात्र नहीं दिख रही है। कृपया नज़दीकी कृषि अधिकारी से संपर्क करें।"
+              : "Currently no schemes appear eligible for your profile. Please contact your local agriculture officer.";
 
         addMessage({
           sender: "agent",
@@ -319,8 +332,8 @@ export function WhatsAppSimulator() {
         language === "mr"
           ? "🏛️ सरकारी-मित्रने तुमच्यासाठी काही योजना निवडल्या आहेत:"
           : language === "hi"
-          ? "🏛️ सरकारी-मित्र ने आपके लिए कुछ योजनाएं चुनी हैं:"
-          : "🏛️ Sarkari-Mitra has found some schemes for you:";
+            ? "🏛️ सरकारी-मित्र ने आपके लिए कुछ योजनाएं चुनी हैं:"
+            : "🏛️ Sarkari-Mitra has found some schemes for you:";
 
       const lines: string[] = [headerText, ""];
 
@@ -330,8 +343,8 @@ export function WhatsAppSimulator() {
           language === "mr"
             ? s.name_marathi || s.name_english
             : language === "hi"
-            ? s.name_hindi || s.name_english
-            : s.name_english;
+              ? s.name_hindi || s.name_english
+              : s.name_english;
 
         lines.push(
           `${idx + 1}) ${name} (${s.scheme_code}) — ${item.eligibility_score}%`
@@ -342,8 +355,8 @@ export function WhatsAppSimulator() {
             language === "mr"
               ? `   लाभ: ${s.benefits_summary}`
               : language === "hi"
-              ? `   लाभ: ${s.benefits_summary}`
-              : `   Benefits: ${s.benefits_summary}`
+                ? `   लाभ: ${s.benefits_summary}`
+                : `   Benefits: ${s.benefits_summary}`
           );
         }
 
@@ -353,8 +366,8 @@ export function WhatsAppSimulator() {
             language === "mr"
               ? `   कारणे: ${reasonsText}`
               : language === "hi"
-              ? `   कारण: ${reasonsText}`
-              : `   Why: ${reasonsText}`
+                ? `   कारण: ${reasonsText}`
+                : `   Why: ${reasonsText}`
           );
         }
 
@@ -365,8 +378,8 @@ export function WhatsAppSimulator() {
             language === "mr"
               ? `   पुढील पाऊल: ${firstStep.title}`
               : language === "hi"
-              ? `   अगला कदम: ${firstStep.title}`
-              : `   Next step: ${firstStep.title}`
+                ? `   अगला कदम: ${firstStep.title}`
+                : `   Next step: ${firstStep.title}`
           );
         }
 
@@ -377,8 +390,8 @@ export function WhatsAppSimulator() {
         language === "mr"
           ? "ℹ️ अधिकृत माहिती व अर्जासाठी नेहमी सरकारी पोर्टलचा वापर करा."
           : language === "hi"
-          ? "ℹ️ आधिकारिक जानकारी और आवेदन के लिए हमेशा सरकारी पोर्टल का उपयोग करें।"
-          : "ℹ️ For official details and application, always use the government portal.";
+            ? "ℹ️ आधिकारिक जानकारी और आवेदन के लिए हमेशा सरकारी पोर्टल का उपयोग करें।"
+            : "ℹ️ For official details and application, always use the government portal.";
 
       lines.push(footer);
 
@@ -393,8 +406,8 @@ export function WhatsAppSimulator() {
         language === "mr"
           ? "सध्या योजना तपासणी सेवा उपलब्ध नाही. कृपया नंतर पुन्हा प्रयत्न करा."
           : language === "hi"
-          ? "अभी योजना जांच सेवा उपलब्ध नहीं है। कृपया बाद में पुनः प्रयास करें।"
-          : "Scheme eligibility service is not available right now. Please try again later.";
+            ? "अभी योजना जांच सेवा उपलब्ध नहीं है। कृपया बाद में पुनः प्रयास करें।"
+            : "Scheme eligibility service is not available right now. Please try again later.";
 
       addMessage({
         sender: "agent",
@@ -411,7 +424,7 @@ export function WhatsAppSimulator() {
     setSending(true);
 
     try {
-      const res = await fetch("http://localhost:4000/agent/query", {
+      const res = await fetch(`${API_BASE_URL}/agent/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: text, language }),
@@ -444,6 +457,49 @@ export function WhatsAppSimulator() {
     const text = input.trim();
     setInput("");
     void sendToAgent(text, "text");
+  }
+
+  function handleRealVoice() {
+    if (isDemoRunning) return;
+
+    // If browser doesn't support speech recognition, show an informative message
+    if (!canUseSpeech || !recognitionRef.current) {
+      const infoText =
+        language === "mr"
+          ? "तुमच्या ब्राउझरमध्ये थेट व्हॉइस ओळख (speech recognition) उपलब्ध नाही. कृपया टायपिंग वापरा किंवा डेस्कटॉप Chrome सारखा ब्राउझर वापरा."
+          : language === "hi"
+            ? "आपके ब्राउज़र में सीधा वॉइस रिकग्निशन (speech recognition) उपलब्ध नहीं है। कृपया टाइप करें या डेस्कटॉप Chrome जैसा ब्राउज़र इस्तेमाल करें।"
+            : "Your browser does not support direct speech recognition. Please type your question or use a desktop Chrome-like browser.";
+
+      addMessage({
+        sender: "agent",
+        text: infoText,
+        kind: "text",
+      });
+      return;
+    }
+
+    try {
+      setIsRecording(true);
+      // Ensure language stays in sync
+      recognitionRef.current.lang =
+        language === "mr" ? "mr-IN" : language === "hi" ? "hi-IN" : "en-IN";
+      recognitionRef.current.start();
+    } catch (err) {
+      console.error("Speech recognition start failed:", err);
+      setIsRecording(false);
+      const errText =
+        language === "mr"
+          ? "मायक्रोफोन सुरू करण्यात समस्या आली. कृपया ब्राउझरची परवानगी तपासा किंवा नंतर पुन्हा प्रयत्न करा."
+          : language === "hi"
+            ? "माइक्रोफोन शुरू करने में समस्या आई। कृपया ब्राउज़र की परमिशन जांचें या बाद में पुनः प्रयास करें।"
+            : "There was a problem starting the microphone. Please check browser permissions or try again later.";
+      addMessage({
+        sender: "agent",
+        text: errText,
+        kind: "text",
+      });
+    }
   }
 
   function handleMockVoice() {
@@ -483,7 +539,7 @@ export function WhatsAppSimulator() {
   function handleMockImage() {
     // Generate random soil card data
     const soilCardData = generateRandomSoilCard();
-    
+
     // Add message showing the soil card component with random data
     addMessage({
       sender: "farmer",
@@ -491,21 +547,21 @@ export function WhatsAppSimulator() {
         language === "mr"
           ? "🖼️ मृदा आरोग्य कार्ड"
           : language === "hi"
-          ? "🖼️ मिट्टी स्वास्थ्य कार्ड"
-          : "🖼️ Soil Health Card",
+            ? "🖼️ मिट्टी स्वास्थ्य कार्ड"
+            : "🖼️ Soil Health Card",
       kind: "image",
       showSoilCard: true,
       soilCardData: soilCardData
     });
-    
+
     // Then send to agent for analysis
     const text =
       language === "mr"
         ? "मृदा आरोग्य कार्डाचा फोटो पाठवला आहे. कृपया सल्ला द्या."
         : language === "hi"
-        ? "मिट्टी स्वास्थ्य कार्ड की फोटो भेजी है. कृपया सलाह दें।"
-        : "Sent a photo of the Soil Health Card. Please provide advice.";
-    
+          ? "मिट्टी स्वास्थ्य कार्ड की फोटो भेजी है. कृपया सलाह दें।"
+          : "Sent a photo of the Soil Health Card. Please provide advice.";
+
     // Wait a bit before sending to agent (to show the card first)
     setTimeout(() => {
       void sendToAgent(text, "text");
@@ -533,57 +589,57 @@ export function WhatsAppSimulator() {
       pStatus: "low" | "good";
       advisory: string;
     }> = [
-      {
-        ph: 5.8,
-        oc: 0.85,
-        n: 280,
-        p: 9,
-        k: 210,
-        phStatus: "low" as const,
-        pStatus: "low" as const,
-        advisory: "pH कमी, P कमी - चुना आणि P खतांची गरज"
-      },
-      {
-        ph: 7.2,
-        oc: 0.65,
-        n: 220,
-        p: 18,
-        k: 180,
-        phStatus: "good" as const,
-        pStatus: "good" as const,
-        advisory: "pH आदर्श, P चांगले - संतुलित खत वापरा"
-      },
-      {
-        ph: 6.1,
-        oc: 0.72,
-        n: 195,
-        p: 12,
-        k: 165,
-        phStatus: "low" as const,
-        pStatus: "low" as const,
-        advisory: "pH थोडा कमी, N आणि P कमी - चुना + NPK खत"
-      },
-      {
-        ph: 7.8,
-        oc: 0.58,
-        n: 250,
-        p: 22,
-        k: 195,
-        phStatus: "high" as const,
-        pStatus: "good" as const,
-        advisory: "pH जास्त, Gypsum वापरा, N खत कमी करा"
-      },
-      {
-        ph: 6.5,
-        oc: 0.95,
-        n: 310,
-        p: 15,
-        k: 240,
-        phStatus: "good" as const,
-        pStatus: "low" as const,
-        advisory: "pH आदर्श, OC चांगले, P कमी - फॉस्फरस खत"
-      }
-    ];
+        {
+          ph: 5.8,
+          oc: 0.85,
+          n: 280,
+          p: 9,
+          k: 210,
+          phStatus: "low" as const,
+          pStatus: "low" as const,
+          advisory: "pH कमी, P कमी - चुना आणि P खतांची गरज"
+        },
+        {
+          ph: 7.2,
+          oc: 0.65,
+          n: 220,
+          p: 18,
+          k: 180,
+          phStatus: "good" as const,
+          pStatus: "good" as const,
+          advisory: "pH आदर्श, P चांगले - संतुलित खत वापरा"
+        },
+        {
+          ph: 6.1,
+          oc: 0.72,
+          n: 195,
+          p: 12,
+          k: 165,
+          phStatus: "low" as const,
+          pStatus: "low" as const,
+          advisory: "pH थोडा कमी, N आणि P कमी - चुना + NPK खत"
+        },
+        {
+          ph: 7.8,
+          oc: 0.58,
+          n: 250,
+          p: 22,
+          k: 195,
+          phStatus: "high" as const,
+          pStatus: "good" as const,
+          advisory: "pH जास्त, Gypsum वापरा, N खत कमी करा"
+        },
+        {
+          ph: 6.5,
+          oc: 0.95,
+          n: 310,
+          p: 15,
+          k: 240,
+          phStatus: "good" as const,
+          pStatus: "low" as const,
+          advisory: "pH आदर्श, OC चांगले, P कमी - फॉस्फरस खत"
+        }
+      ];
 
     const farmer = farmers[Math.floor(Math.random() * farmers.length)];
     const scenario = scenarios[Math.floor(Math.random() * scenarios.length)];
@@ -1180,8 +1236,8 @@ export function WhatsAppSimulator() {
           language === "mr"
             ? "नमस्कार 👋, मी Kisan Setu AI आहे. फोटो / आवाज पाठवल्यास मी अधिक चांगला सल्ला देऊ शकतो."
             : language === "hi"
-            ? "नमस्कार 👋, मैं Kisan Setu AI हूं। फोटो / आवाज भेजने पर मैं बेहतर सलाह दे सकता हूं।"
-            : "Hello 👋, I'm Kisan Setu AI. Send a photo or voice for better advice.",
+              ? "नमस्कार 👋, मैं Kisan Setu AI हूं। फोटो / आवाज भेजने पर मैं बेहतर सलाह दे सकता हूं।"
+              : "Hello 👋, I'm Kisan Setu AI. Send a photo or voice for better advice.",
       },
     ]);
     setNextId(3);
@@ -1214,8 +1270,8 @@ export function WhatsAppSimulator() {
               language === "mr"
                 ? "मृदा आरोग्य कार्डाचा फोटो पाठवला आहे. कृपया सल्ला द्या."
                 : language === "hi"
-                ? "मिट्टी स्वास्थ्य कार्ड की फोटो भेजी है. कृपया सलाह दें।"
-                : "Sent a photo of the Soil Health Card. Please provide advice.";
+                  ? "मिट्टी स्वास्थ्य कार्ड की फोटो भेजी है. कृपया सलाह दें।"
+                  : "Sent a photo of the Soil Health Card. Please provide advice.";
             void sendToAgent(analysisText, "text");
           }, 500);
         } else {
@@ -1261,6 +1317,66 @@ export function WhatsAppSimulator() {
     };
   }, []);
 
+  // Browser speech recognition setup (for real voice input where supported)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const SR =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SR) {
+      setCanUseSpeech(false);
+      recognitionRef.current = null;
+      return;
+    }
+
+    setCanUseSpeech(true);
+
+    const rec = new SR();
+    rec.lang = language === "mr" ? "mr-IN" : language === "hi" ? "hi-IN" : "en-IN";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+
+    rec.onresult = (event: any) => {
+      setIsRecording(false);
+      const transcript =
+        event?.results?.[0]?.[0]?.transcript &&
+        String(event.results[0][0].transcript);
+
+      if (transcript && transcript.trim()) {
+        const textPrefix =
+          language === "mr"
+            ? "🎙️ [Voice] "
+            : language === "hi"
+              ? "🎙️ [Voice] "
+              : "🎙️ [Voice] ";
+
+        const finalText = `${textPrefix}${transcript.trim()}`;
+        void sendToAgent(finalText, "voice");
+      }
+    };
+
+    rec.onerror = () => {
+      setIsRecording(false);
+    };
+
+    rec.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = rec;
+
+    return () => {
+      try {
+        rec.stop();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+      setIsRecording(false);
+    };
+  }, [language]);
+
   // Auto-scroll to latest message
   useEffect(() => {
     const el = scrollContainerRef.current;
@@ -1269,22 +1385,42 @@ export function WhatsAppSimulator() {
     }
   }, [messages, sending]);
 
+  const isFullscreen = variant === "fullscreen";
+
   return (
-    <section className="rounded-3xl border border-slate-800 bg-slate-900/80 p-3 sm:p-4 flex flex-col h-[420px] sm:h-[460px] lg:h-[520px] max-h-[55vh] w-full">
-      <header className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2">
+    <section
+      className={
+        isFullscreen
+          ? "flex flex-col flex-1 min-h-0 w-full bg-[#0b141a] overflow-hidden"
+          : "rounded-3xl border border-slate-800 bg-slate-900/80 p-3 sm:p-4 flex flex-col h-[420px] sm:h-[460px] lg:h-[520px] max-h-[55vh] w-full !mt-0"
+      }
+    >
+      <header
+        className={
+          isFullscreen
+            ? "flex items-center justify-between gap-2 px-4 py-3 bg-[#202c33] border-b border-slate-700/50 shrink-0"
+            : "flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2"
+        }
+      >
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-semibold">
+          <div
+            className={
+              isFullscreen
+                ? "h-10 w-10 rounded-full bg-emerald-600 flex items-center justify-center text-sm font-semibold"
+                : "h-8 w-8 rounded-full bg-emerald-600 flex items-center justify-center text-xs font-semibold"
+            }
+          >
             KS
           </div>
-          <div className="text-xs">
+          <div className={isFullscreen ? "text-sm" : "text-xs"}>
             <p className="font-semibold text-slate-100">Kisan Setu WhatsApp</p>
-            <p className="text-[10px] text-emerald-400">
+            <p className={`${isFullscreen ? "text-xs" : "text-[10px]"} text-emerald-400`}>
               {isDemoRunning ? "demo mode • running" : "online • prototype"}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isDemoRunning ? (
+          {/* {isDemoRunning ? (
             <button
               onClick={stopDemo}
               className="px-2 py-1 rounded-full bg-red-600/80 text-[10px] text-white font-semibold"
@@ -1298,6 +1434,15 @@ export function WhatsAppSimulator() {
             >
               ▶️ Play Demo
             </button>
+          )} */}
+          {pathname !== "/whatsapp-demo" && (
+            <a
+              href="/whatsapp-demo"
+              className={`${isFullscreen ? "flex" : "hidden sm:flex"} flex-1 items-center justify-center gap-1 rounded-full border border-emerald-700 text-[11px] text-emerald-200 px-2 py-1 bg-emerald-900/40 disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <span>🏛️</span>
+              <span>Full Whatsapp UI</span>
+            </a>
           )}
           <select
             className="bg-slate-900 border border-slate-700 rounded-full px-3 py-1 text-[10px] text-slate-200"
@@ -1314,14 +1459,17 @@ export function WhatsAppSimulator() {
 
       <div
         ref={scrollContainerRef}
-        className="flex-1 flex flex-col gap-1 overflow-y-auto rounded-2xl bg-slate-950/60 p-2 scrollbar-thin"
+        className={
+          isFullscreen
+            ? "flex-1 flex flex-col gap-2 overflow-y-auto p-4 bg-[#0b141a] scrollbar-thin min-h-0"
+            : "flex-1 flex flex-col gap-1 overflow-y-auto rounded-2xl bg-slate-950/60 p-2 scrollbar-thin"
+        }
       >
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`flex ${
-              msg.sender === "farmer" ? "justify-end" : "justify-start"
-            }`}
+            className={`flex ${msg.sender === "farmer" ? "justify-end" : "justify-start"
+              }`}
           >
             {msg.showSoilCard ? (
               <div className="max-w-[85%] sm:max-w-[75%]">
@@ -1336,11 +1484,13 @@ export function WhatsAppSimulator() {
               </div>
             ) : (
               <div
-                className={`max-w-[80%] rounded-2xl px-3 py-2 text-[11px] leading-snug ${
-                  msg.sender === "farmer"
+                className={`max-w-[80%] rounded-2xl px-3 py-2 leading-snug ${isFullscreen ? "text-sm px-4 py-2.5" : "text-[11px]"
+                  } ${msg.sender === "farmer"
                     ? "bg-emerald-600 text-emerald-50 rounded-br-sm"
-                    : "bg-slate-800 text-slate-100 rounded-bl-sm"
-                }`}
+                    : isFullscreen
+                      ? "bg-[#202c33] text-slate-100 rounded-bl-sm"
+                      : "bg-slate-800 text-slate-100 rounded-bl-sm"
+                  }`}
               >
                 <p>{msg.text}</p>
               </div>
@@ -1356,7 +1506,7 @@ export function WhatsAppSimulator() {
         )}
       </div>
 
-      <div className="mt-2 flex flex-col gap-2">
+      <div className={`mt-2 flex flex-col gap-2 ${isFullscreen ? "p-4 pb-6 sm:pb-4" : ""}`}>
         {isDemoRunning && (
           <div className="text-center py-1 px-2 rounded-lg bg-accent/20 border border-accent/40">
             <p className="text-[10px] text-accent font-semibold">
@@ -1370,8 +1520,8 @@ export function WhatsAppSimulator() {
               {language === "mr"
                 ? "सरकारी-मित्र: तुमची मूलभूत माहिती निवडा"
                 : language === "hi"
-                ? "सरकारी-मित्र: अपनी बुनियादी जानकारी चुनें"
-                : "Sarkari-Mitra: Select your basic details"}
+                  ? "सरकारी-मित्र: अपनी बुनियादी जानकारी चुनें"
+                  : "Sarkari-Mitra: Select your basic details"}
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
@@ -1379,8 +1529,8 @@ export function WhatsAppSimulator() {
                   {language === "mr"
                     ? "राज्य (code)"
                     : language === "hi"
-                    ? "राज्य (code)"
-                    : "State (code)"}
+                      ? "राज्य (code)"
+                      : "State (code)"}
                 </label>
                 <select
                   className="w-full rounded-lg bg-slate-950/70 border border-emerald-700 px-2 py-1"
@@ -1403,8 +1553,8 @@ export function WhatsAppSimulator() {
                   {language === "mr"
                     ? "जमीन आकार"
                     : language === "hi"
-                    ? "जमीन आकार"
-                    : "Land size"}
+                      ? "जमीन आकार"
+                      : "Land size"}
                 </label>
                 <select
                   className="w-full rounded-lg bg-slate-950/70 border border-emerald-700 px-2 py-1"
@@ -1417,22 +1567,22 @@ export function WhatsAppSimulator() {
                     {language === "mr"
                       ? "लहान (~0.5 ha)"
                       : language === "hi"
-                      ? "छोटा (~0.5 ha)"
-                      : "Small (~0.5 ha)"}
+                        ? "छोटा (~0.5 ha)"
+                        : "Small (~0.5 ha)"}
                   </option>
                   <option value="medium">
                     {language === "mr"
                       ? "मध्यम (~2 ha)"
                       : language === "hi"
-                      ? "मध्यम (~2 ha)"
-                      : "Medium (~2 ha)"}
+                        ? "मध्यम (~2 ha)"
+                        : "Medium (~2 ha)"}
                   </option>
                   <option value="large">
                     {language === "mr"
                       ? "मोठा (~5 ha)"
                       : language === "hi"
-                      ? "बड़ा (~5 ha)"
-                      : "Large (~5 ha)"}
+                        ? "बड़ा (~5 ha)"
+                        : "Large (~5 ha)"}
                   </option>
                 </select>
               </div>
@@ -1441,8 +1591,8 @@ export function WhatsAppSimulator() {
                   {language === "mr"
                     ? "जमीन प्रकार"
                     : language === "hi"
-                    ? "जमीन प्रकार"
-                    : "Land type"}
+                      ? "जमीन प्रकार"
+                      : "Land type"}
                 </label>
                 <select
                   className="w-full rounded-lg bg-slate-950/70 border border-emerald-700 px-2 py-1"
@@ -1457,22 +1607,22 @@ export function WhatsAppSimulator() {
                     {language === "mr"
                       ? "सिंचित"
                       : language === "hi"
-                      ? "सिंचित"
-                      : "Irrigated"}
+                        ? "सिंचित"
+                        : "Irrigated"}
                   </option>
                   <option value="rainfed">
                     {language === "mr"
                       ? "जैविक / पावसावर"
                       : language === "hi"
-                      ? "वर्षा आधारित"
-                      : "Rainfed"}
+                        ? "वर्षा आधारित"
+                        : "Rainfed"}
                   </option>
                   <option value="both">
                     {language === "mr"
                       ? "दोन्ही"
                       : language === "hi"
-                      ? "दोनों"
-                      : "Both"}
+                        ? "दोनों"
+                        : "Both"}
                   </option>
                 </select>
               </div>
@@ -1481,8 +1631,8 @@ export function WhatsAppSimulator() {
                   {language === "mr"
                     ? "शेतकरी नोंदणी"
                     : language === "hi"
-                    ? "किसान पंजीकरण"
-                    : "Farmer registration"}
+                      ? "किसान पंजीकरण"
+                      : "Farmer registration"}
                 </label>
                 <select
                   className="w-full rounded-lg bg-slate-950/70 border border-emerald-700 px-2 py-1"
@@ -1495,15 +1645,15 @@ export function WhatsAppSimulator() {
                     {language === "mr"
                       ? "होय"
                       : language === "hi"
-                      ? "हाँ"
-                      : "Yes"}
+                        ? "हाँ"
+                        : "Yes"}
                   </option>
                   <option value="no">
                     {language === "mr"
                       ? "नाही"
                       : language === "hi"
-                      ? "नहीं"
-                      : "No"}
+                        ? "नहीं"
+                        : "No"}
                   </option>
                 </select>
               </div>
@@ -1512,8 +1662,8 @@ export function WhatsAppSimulator() {
                   {language === "mr"
                     ? "बँक खाते"
                     : language === "hi"
-                    ? "बैंक खाता"
-                    : "Bank account"}
+                      ? "बैंक खाता"
+                      : "Bank account"}
                 </label>
                 <select
                   className="w-full rounded-lg bg-slate-950/70 border border-emerald-700 px-2 py-1"
@@ -1524,15 +1674,15 @@ export function WhatsAppSimulator() {
                     {language === "mr"
                       ? "होय"
                       : language === "hi"
-                      ? "हाँ"
-                      : "Yes"}
+                        ? "हाँ"
+                        : "Yes"}
                   </option>
                   <option value="no">
                     {language === "mr"
                       ? "नाही"
                       : language === "hi"
-                      ? "नहीं"
-                      : "No"}
+                        ? "नहीं"
+                        : "No"}
                   </option>
                 </select>
               </div>
@@ -1541,8 +1691,8 @@ export function WhatsAppSimulator() {
                   {language === "mr"
                     ? "आधार लिंक"
                     : language === "hi"
-                    ? "आधार लिंक"
-                    : "Aadhaar linked"}
+                      ? "आधार लिंक"
+                      : "Aadhaar linked"}
                 </label>
                 <select
                   className="w-full rounded-lg bg-slate-950/70 border border-emerald-700 px-2 py-1"
@@ -1555,15 +1705,15 @@ export function WhatsAppSimulator() {
                     {language === "mr"
                       ? "होय"
                       : language === "hi"
-                      ? "हाँ"
-                      : "Yes"}
+                        ? "हाँ"
+                        : "Yes"}
                   </option>
                   <option value="no">
                     {language === "mr"
                       ? "नाही"
                       : language === "hi"
-                      ? "नहीं"
-                      : "No"}
+                        ? "नहीं"
+                        : "No"}
                   </option>
                 </select>
               </div>
@@ -1577,8 +1727,8 @@ export function WhatsAppSimulator() {
                 {language === "mr"
                   ? "रद्द"
                   : language === "hi"
-                  ? "रद्द"
-                  : "Cancel"}
+                    ? "रद्द"
+                    : "Cancel"}
               </button>
               <button
                 type="button"
@@ -1589,21 +1739,35 @@ export function WhatsAppSimulator() {
                 {language === "mr"
                   ? "योजना दाखवा"
                   : language === "hi"
-                  ? "योजनाएं दिखाएं"
-                  : "Show schemes"}
+                    ? "योजनाएं दिखाएं"
+                    : "Show schemes"}
               </button>
             </div>
           </div>
         )}
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${isFullscreen ? "flex-wrap" : ""}`}>
           <button
             type="button"
-            onClick={handleMockVoice}
+            onClick={handleRealVoice}
             disabled={isDemoRunning}
             className="flex-1 flex items-center justify-center gap-1 rounded-full border border-slate-700 text-[11px] text-slate-200 px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>🎙️</span>
-            <span>Mock Voice</span>
+            <span>{canUseSpeech ? (isRecording ? "⏺️" : "🎤") : "🎙️"}</span>
+            <span>
+              {canUseSpeech
+                ? isRecording
+                  ? language === "mr"
+                    ? "ऐकतोय..."
+                    : language === "hi"
+                      ? "सुन रहे हैं..."
+                      : "Listening..."
+                  : language === "mr"
+                    ? "Voice"
+                    : language === "hi"
+                      ? "Voice"
+                      : "Voice"
+                : "Mock Voice"}
+            </span>
           </button>
           <button
             type="button"
@@ -1614,11 +1778,11 @@ export function WhatsAppSimulator() {
             <span>🖼️</span>
             <span>Mock Soil Card</span>
           </button>
-          <button
+          {/* <button
             type="button"
             onClick={handleSarkariMitra}
             disabled={isDemoRunning || checkingSchemes}
-            className="hidden sm:flex flex-1 items-center justify-center gap-1 rounded-full border border-emerald-700 text-[11px] text-emerald-200 px-2 py-1 bg-emerald-900/40 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`${isFullscreen ? "flex" : "hidden sm:flex"} flex-1 items-center justify-center gap-1 rounded-full border border-emerald-700 text-[11px] text-emerald-200 px-2 py-1 bg-emerald-900/40 disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             <span>🏛️</span>
             <span>
@@ -1628,11 +1792,12 @@ export function WhatsAppSimulator() {
                 ? "Sarkari-Mitra"
                 : "Sarkari-Mitra"}
             </span>
-          </button>
+          </button> */}
         </div>
         <div className="flex items-center gap-2">
           <input
-            className="flex-1 rounded-full bg-slate-950/70 border border-slate-700 px-3 py-1.5 text-[11px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+            className={`flex-1 rounded-full bg-slate-950/70 border border-slate-700 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50 ${isFullscreen ? "px-4 py-2.5 text-sm" : "px-3 py-1.5 text-[11px]"
+              }`}
             placeholder="Type a message…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -1648,7 +1813,8 @@ export function WhatsAppSimulator() {
             type="button"
             onClick={handleSendText}
             disabled={sending || isDemoRunning}
-            className="rounded-full bg-emerald-600 text-emerald-50 text-[11px] font-semibold px-3 py-1.5 disabled:opacity-60"
+            className={`rounded-full bg-emerald-600 text-emerald-50 font-semibold disabled:opacity-60 ${isFullscreen ? "px-4 py-2.5 text-sm" : "px-3 py-1.5 text-[11px]"
+              }`}
           >
             Send
           </button>

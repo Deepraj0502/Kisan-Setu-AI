@@ -1,4 +1,5 @@
 import { getPool } from "./client";
+import "dotenv/config";
 
 async function run() {
   const pool = getPool();

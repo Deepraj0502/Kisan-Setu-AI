@@ -1,4 +1,6 @@
 import { parse } from "pg-connection-string";
+import dotenv from "dotenv";
+dotenv.config();
 
 export interface DbConfig {
   host: string;

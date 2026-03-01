@@ -55,6 +55,14 @@ export default function Home() {
         <section className="grid gap-4 lg:grid-cols-2 items-start">
           {/* <AgentConsole /> */}
           <div className="space-y-4">
+            <div className="flex justify-end sm:hidden">
+              <a
+                href="/whatsapp-demo"
+                className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+              >
+                Open WhatsApp UI →
+              </a>
+            </div>
             <WhatsAppSimulator />
           </div>
           <SoilCardSample />

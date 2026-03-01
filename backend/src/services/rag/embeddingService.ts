@@ -5,6 +5,10 @@
  */
 
 import { getPool } from "../../db/client";
+import {
+  BedrockRuntimeClient,
+  InvokeModelCommand
+} from "@aws-sdk/client-bedrock-runtime";
 import type {
   CreateEmbeddingInput,
   KnowledgeEmbedding,
@@ -13,34 +17,95 @@ import type {
   LanguageCode
 } from "../../types/rag";
 
+// Target dimension must match the pgvector column definition in 001_rag_schema.sql
+const VECTOR_DIMENSIONS = 1536;
+
 /**
- * Generate embedding vector from text using Amazon Bedrock
- * TODO: Integrate with Amazon Bedrock Titan Embeddings model
- * 
- * @param text - Text to embed
- * @param language - Language of the text
- * @returns Vector embedding (1536 dimensions)
+ * Generate embedding vector from text using Amazon Bedrock.
+ * Normalises the output length to VECTOR_DIMENSIONS so it is always
+ * compatible with the pgvector(1536) column, even if the underlying
+ * model returns a different dimension (e.g. 1024 for Titan v2).
  */
 export async function generateEmbedding(
   text: string,
   language: LanguageCode = "en"
 ): Promise<number[]> {
-  // TODO: Replace with actual Bedrock Titan Embeddings API call
-  // For now, return a mock vector (all zeros) - this will be replaced
-  // when AWS credits are available
-  
-  console.warn("⚠️  Mock embedding generation - replace with Bedrock Titan Embeddings");
-  
-  // Mock: Return a zero vector of correct dimensions
-  // In production, this will call:
-  // const bedrock = new BedrockRuntimeClient({ region: 'us-east-1' });
-  // const response = await bedrock.send(new InvokeModelCommand({
-  //   modelId: 'amazon.titan-embed-text-v1',
-  //   body: JSON.stringify({ inputText: text })
-  // }));
-  // return JSON.parse(response.body.transformToString()).embedding;
-  
-  return new Array(1536).fill(0);
+  const useBedrock = process.env.USE_BEDROCK_RAG === "true";
+  const modelId = process.env.BEDROCK_EMBEDDING_MODEL_ID;
+  const region = process.env.AWS_REGION || "us-east-1";
+
+  if (useBedrock && modelId) {
+    try {
+      const client = new BedrockRuntimeClient({ region });
+      const body = JSON.stringify({
+        inputText: text
+      });
+
+      const command = new InvokeModelCommand({
+        modelId,
+        contentType: "application/json",
+        accept: "application/json",
+        body
+      });
+
+      const response = await client.send(command);
+      const rawBody = response.body;
+
+      let textBody = "";
+      if (typeof rawBody === "string") {
+        textBody = rawBody;
+      } else if (rawBody instanceof Uint8Array) {
+        textBody = new TextDecoder("utf-8").decode(rawBody);
+      } else if (rawBody && (rawBody as any).transformToString) {
+        textBody = await (rawBody as any).transformToString();
+      } else {
+        textBody = String(rawBody ?? "");
+      }
+
+      const parsed = JSON.parse(textBody);
+      const embeddingRaw: unknown =
+        parsed.embedding ?? parsed.embeddings ?? parsed.vector;
+
+      if (Array.isArray(embeddingRaw)) {
+        let embedding = (embeddingRaw as unknown[]).map((v) => Number(v) || 0);
+
+        const originalLength = embedding.length;
+        if (originalLength !== VECTOR_DIMENSIONS) {
+          // Adjust length to match pgvector schema
+          if (originalLength > VECTOR_DIMENSIONS) {
+            embedding = embedding.slice(0, VECTOR_DIMENSIONS);
+          } else {
+            const padded = new Array(VECTOR_DIMENSIONS).fill(0);
+            for (let i = 0; i < originalLength; i++) {
+              padded[i] = embedding[i];
+            }
+            embedding = padded;
+          }
+          console.warn(
+            `Embedding length ${originalLength} adjusted to ${VECTOR_DIMENSIONS} to match pgvector schema.`
+          );
+        }
+
+        return embedding;
+      }
+
+      console.warn(
+        "Unexpected embedding response shape from Bedrock, falling back to mock vector"
+      );
+    } catch (error) {
+      console.error(
+        "Error calling Bedrock embedding model, falling back to mock vector",
+        error
+      );
+    }
+  }
+
+  // Fallback: return deterministic-length zero vector so the rest of the
+  // pipeline keeps working even if Bedrock/env is not configured.
+  console.warn(
+    "⚠️ Using mock embedding vector. Configure USE_BEDROCK_RAG=true and BEDROCK_EMBEDDING_MODEL_ID to enable real embeddings."
+  );
+  return new Array(VECTOR_DIMENSIONS).fill(0);
 }
 
 /**
