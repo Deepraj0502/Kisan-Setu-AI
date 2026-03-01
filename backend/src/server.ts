@@ -11,9 +11,17 @@ import "dotenv/config";
 
 const app = express();
 
+// Allow Vercel frontend + localhost. Override via CORS_ORIGIN (comma-separated).
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+  : ["http://localhost:3000", "https://kisan-setu-ai.vercel.app"];
+
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+      else cb(null, false);
+    },
     credentials: false
   })
 );
