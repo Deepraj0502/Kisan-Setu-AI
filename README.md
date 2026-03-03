@@ -352,125 +352,35 @@ This project is part of a hackathon submission for AI for Rural Innovation & Sus
 
 ---
 
-## 🚀 AWS Deployment
+## 🚀 Deployment
 
-### Quick Deployment (1 hour)
+### Current Deployment (Production)
 
-Deploy Kisan Setu AI to AWS with this simple guide:
+**Live URLs:**
+- Frontend: https://main.d29xa6wbhq5k45.amplifyapp.com
+- Backend: https://kisan-setu-ai.duckdns.org
 
-1. **Database**: AWS RDS PostgreSQL with pgvector
-2. **Backend**: AWS EC2 with Node.js + PM2 + Nginx
-3. **Frontend**: Vercel (free tier)
+**Architecture:**
+- Frontend: AWS Amplify (Next.js)
+- Backend: AWS EC2 (Node.js + PM2 + Nginx + SSL)
+- Database: AWS RDS PostgreSQL (pgvector + PostGIS)
 
-**Cost**: ~$45-60/month
+**Cost:** ~$30-45/month
 
-### Deployment Guides
-
-- 📖 **[Quick Start Guide](DEPLOYMENT_QUICK_START.md)** - Get deployed in under 1 hour
-- 📋 **[Deployment Checklist](DEPLOYMENT_CHECKLIST.md)** - Step-by-step checklist
-- 📚 **[Full Deployment Guide](AWS_DEPLOYMENT_GUIDE.md)** - Comprehensive AWS deployment documentation
-
-### One-Command Deployment
-
-```bash
-# Set your EC2 details
-export EC2_HOST=your-ec2-ip
-export EC2_KEY=/path/to/key.pem
-
-# Run deployment script
-./deploy.sh
-```
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         AWS Cloud                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌──────────────┐         ┌──────────────┐                  │
-│  │   Vercel     │         │   AWS EC2    │                  │
-│  │  (Frontend)  │────────▶│  (Backend)   │                  │
-│  │   Next.js    │  HTTPS  │   Node.js    │                  │
-│  └──────────────┘         └──────┬───────┘                  │
-│                                   │                           │
-│                          ┌────────┴────────┐                 │
-│                          │                 │                 │
-│                    ┌─────▼─────┐    ┌─────▼─────┐          │
-│                    │  RDS      │    │  AWS      │          │
-│                    │ PostgreSQL│    │ Services  │          │
-│                    │ +pgvector │    │ - Bedrock │          │
-│                    └───────────┘    │ - Polly   │          │
-│                                     │ - SageMaker│          │
-│                                     └───────────┘          │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Deployment Options
-
-#### Option 1: Recommended (Vercel + EC2)
-- **Frontend**: Vercel (Free tier, auto-deploy from Git)
-- **Backend**: AWS EC2 t3.small
-- **Database**: AWS RDS PostgreSQL
-- **Cost**: $45-60/month
-
-#### Option 2: Full AWS
-- **Frontend**: AWS Amplify or S3 + CloudFront
-- **Backend**: AWS EC2 or ECS
-- **Database**: AWS RDS PostgreSQL
-- **Cost**: $50-70/month
-
-### Environment Variables
-
-#### Backend (.env)
-```env
-DATABASE_URL=postgresql://postgres:PASSWORD@RDS_ENDPOINT:5432/postgres
-AWS_REGION=ap-south-1
-PORT=4000
-NODE_ENV=production
-USE_BEDROCK_RAG=true
-CORS_ORIGIN=https://your-frontend.vercel.app
-DATA_GOV_IN_API_KEY=your_api_key
-```
-
-#### Frontend (Vercel Environment Variables)
-```env
-NEXT_PUBLIC_API_URL=https://api.yourdomain.com
-NEXT_PUBLIC_USE_AWS_POLLY=true
-```
-
-### Post-Deployment
-
-After deployment, verify:
-- ✅ Backend health: `curl https://api.yourdomain.com/health`
-- ✅ Frontend loads correctly
-- ✅ User registration works
-- ✅ Chat functionality works
-- ✅ Voice playback works
-- ✅ Image upload works
-
-### Monitoring
-
-- **Logs**: `pm2 logs kisan-setu-backend`
-- **Status**: `pm2 status`
-- **CloudWatch**: Monitor EC2 and RDS metrics
-- **Uptime**: Configure UptimeRobot or similar
+### Documentation
+- 📖 **[Deployment Guide](DEPLOYMENT.md)** - Complete deployment documentation
+- ⚡ **[Quick Commands](QUICK_COMMANDS.md)** - Common operations reference
 
 ### Maintenance
 
 ```bash
 # Update backend
+ssh -i your-key.pem ubuntu@13.201.127.127
 cd /var/www/kisan-setu-backend
-git pull
-npm install
-npm run build
-pm2 restart kisan-setu-backend
+git pull && npm install && pm2 restart kisan-setu-backend
 
-# View logs
-pm2 logs kisan-setu-backend
-
-# Database backup
-pg_dump -h RDS_ENDPOINT -U postgres -d postgres > backup.sql
+# Update frontend
+git push origin main  # Auto-deploys via Amplify
 ```
 
 ---
@@ -481,51 +391,30 @@ pg_dump -h RDS_ENDPOINT -U postgres -d postgres > backup.sql
 kisan-setu-ai/
 ├── backend/                    # Node.js + Express backend
 │   ├── src/
-│   │   ├── server.ts          # Main server file
+│   │   ├── server.ts          # Main server
 │   │   ├── services/          # Business logic
-│   │   │   ├── ttsService.ts  # AWS Polly TTS
-│   │   │   ├── cropDiseaseService.ts
-│   │   │   ├── geospatialService.ts
-│   │   │   ├── realtimeDataService.ts
-│   │   │   └── farmerProfileService.ts
 │   │   └── db/                # Database migrations
-│   ├── ecosystem.config.js    # PM2 configuration
-│   └── .env.production.example
+│   └── ecosystem.config.js    # PM2 configuration
 ├── frontend/                   # Next.js frontend
 │   ├── app/
-│   ├── components/
-│   │   ├── WhatsAppSimulator.tsx
-│   │   └── SoilCardSample.tsx
-│   └── .env.production.example
-├── .github/workflows/          # CI/CD pipelines
-├── deploy.sh                   # Deployment script
-├── AWS_DEPLOYMENT_GUIDE.md     # Full deployment guide
-├── DEPLOYMENT_CHECKLIST.md     # Deployment checklist
-└── DEPLOYMENT_QUICK_START.md   # Quick start guide
+│   └── components/
+│       ├── WhatsAppSimulator.tsx
+│       └── SoilCardSample.tsx
+├── amplify.yml                 # Amplify build config
+├── DEPLOYMENT.md               # Deployment documentation
+└── QUICK_COMMANDS.md           # Command reference
 ```
 
 ---
 
 ## 🔒 Security
 
-- ✅ HTTPS/SSL enforced
+- ✅ HTTPS/SSL with Let's Encrypt
 - ✅ IAM roles for AWS services
-- ✅ Security groups properly configured
+- ✅ Security groups configured
 - ✅ Database encryption at rest
 - ✅ Environment variables secured
 - ✅ CORS properly configured
-- ✅ Rate limiting implemented
-
----
-
-## 💰 Cost Optimization
-
-- Use Reserved Instances (save 30-50%)
-- Enable RDS auto-scaling
-- Implement caching (Redis)
-- Use CloudFront CDN
-- Monitor with AWS Cost Explorer
-- Set up billing alerts
 
 ---
 
@@ -538,24 +427,6 @@ Contributions are welcome! Please read our contributing guidelines.
 ## 📄 License
 
 MIT License - see LICENSE file for details
-
----
-
-## 🆘 Support
-
-- 📖 Documentation: See deployment guides
-- 🐛 Issues: GitHub Issues
-- 💬 Discussions: GitHub Discussions
-- 📧 Email: support@kisansetu.ai
-
----
-
-## 🎉 Acknowledgments
-
-- AWS for cloud infrastructure
-- Open-Meteo for weather data
-- data.gov.in for market prices
-- All contributors and supporters
 
 ---
 
