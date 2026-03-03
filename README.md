@@ -418,16 +418,4 @@ kisan-setu-ai/
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Please read our contributing guidelines.
-
----
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
----
-
 **Built with ❤️ for Indian farmers**
