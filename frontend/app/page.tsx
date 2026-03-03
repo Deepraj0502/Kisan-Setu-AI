@@ -1,7 +1,5 @@
-import { AgentConsole } from "../components/AgentConsole";
 import { WhatsAppSimulator } from "../components/WhatsAppSimulator";
 import { SoilCardSample } from "../components/SoilCardSample";
-import SarkariMitra from "../components/SarkariMitra";
 
 export default function Home() {
   return (
@@ -53,7 +51,6 @@ export default function Home() {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-2 items-start">
-          {/* <AgentConsole /> */}
           <div className="space-y-4">
             <div className="flex justify-end sm:hidden">
               <a
@@ -67,10 +64,6 @@ export default function Home() {
           </div>
           <SoilCardSample />
         </section>
-
-        {/* <section className="mt-8">
-          <SarkariMitra language="mr" />
-        </section> */}
       </div>
     </main>
   );

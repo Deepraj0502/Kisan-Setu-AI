@@ -7,14 +7,21 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "migrate:db": "ts-node src/db/migrate.ts",
     "migrate:rag": "ts-node src/db/migrations/runMigrations.ts",
+    "migrate:profiles": "ts-node src/db/runProfileMigration.ts",
+    "migrate:geospatial": "ts-node src/db/runGeospatialMigration.ts",
+    "update:profiles": "ts-node src/db/updateProfileSchema.ts",
     "check:db": "ts-node src/db/checkPgvector.ts",
     "seed:rag": "ts-node src/db/seedRagEmbeddings.ts",
+    "test:geospatial": "ts-node test-geospatial.ts",
+    "test:realtime": "ts-node test-realtime-data.ts",
+    "test:chatbot-integration": "ts-node test-chatbot-integration.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1000.0",
+    "@aws-sdk/client-polly": "^3.1000.0",
+    "@aws-sdk/client-sagemaker-geospatial": "^3.1000.0",
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
     "express": "^4.21.2",
@@ -24,6 +31,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^20.11.0",
     "@types/pg": "^8.11.6",
     "ts-node": "^10.9.2",

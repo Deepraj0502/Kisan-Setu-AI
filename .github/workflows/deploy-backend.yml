@@ -1,0 +1,60 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+      
+      - name: Build TypeScript
+        working-directory: ./backend
+        run: npm run build
+      
+      - name: Deploy to EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          HOST: ${{ secrets.EC2_HOST }}
+          USER: ubuntu
+        run: |
+          echo "$PRIVATE_KEY" > private_key.pem
+          chmod 600 private_key.pem
+          
+          # Create deployment directory
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${USER}@${HOST} '
+            mkdir -p /var/www/kisan-setu-backend
+          '
+          
+          # Copy files to EC2
+          scp -o StrictHostKeyChecking=no -i private_key.pem -r \
+            backend/dist \
+            backend/package*.json \
+            backend/ecosystem.config.js \
+            ${USER}@${HOST}:/var/www/kisan-setu-backend/
+          
+          # Install dependencies and restart
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${USER}@${HOST} '
+            cd /var/www/kisan-setu-backend
+            npm ci --production
+            pm2 reload ecosystem.config.js --env production
+          '
+          
+          rm -f private_key.pem
