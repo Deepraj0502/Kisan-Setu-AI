@@ -52,12 +52,18 @@ export default function Home() {
 
         <section className="grid gap-4 lg:grid-cols-2 items-start">
           <div className="space-y-4">
-            <div className="flex justify-end sm:hidden">
+            <div className="flex justify-end">
               <a
                 href="/whatsapp-demo"
-                className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+                className="group relative inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-sm font-medium hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-105 mb-4"
               >
-                Open WhatsApp UI →
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                <span>Open Fullscreen</span>
+                <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
               </a>
             </div>
             <WhatsAppSimulator />

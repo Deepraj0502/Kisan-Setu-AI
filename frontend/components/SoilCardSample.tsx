@@ -218,8 +218,8 @@ export function SoilCardSample({ compact = false, data }: SoilCardSampleProps) {
         </table>
       </div>
 
-      {/* <div className="space-y-1">
-        <p className="text-[10px] text-slate-400">Advisory (DEMO)</p>
+       <div className="space-y-1">
+        {/* <p className="text-[10px] text-slate-400">Advisory</p> */}
         <p className="text-[11px] text-slate-200">
           pH थोडा कमी असल्याने चुना / लाइमिंगची गरज, फॉस्फरस कमी असल्याने P
           खतांची भर घालणे फायदेशीर. प्रत्यक्ष सल्ला स्थानिक कृषी अधिकारी व
@@ -227,7 +227,7 @@ export function SoilCardSample({ compact = false, data }: SoilCardSampleProps) {
         </p>
       </div>
 
-      <p className="text-[9px] text-slate-500">
+      {/* <p className="text-[9px] text-slate-500">
         This is a demo visualization. In the full system, this card image will
         be read using Amazon Textract + RAG to auto-generate personalized
         fertilizer plans.
