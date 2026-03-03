@@ -2012,7 +2012,7 @@ export function WhatsAppSimulator({ variant = "embedded" }: WhatsAppSimulatorPro
         <div className="flex items-center gap-2">
           {isPhoneVerified && (
             <>
-              <div className="flex flex-col items-end mr-2">
+              <div className="hidden sm:flex flex-col items-end mr-2">
                 <p className="text-xs text-slate-300 font-medium">
                   {phoneNumber}
                 </p>
@@ -2165,7 +2165,10 @@ export function WhatsAppSimulator({ variant = "embedded" }: WhatsAppSimulatorPro
                 </div>
               </div>
             ) : (
-              <div className="flex items-start gap-1.5">
+              <div className={`flex items-start ${msg.sender === "farmer"
+                      ? "justify-end"
+                      : "justify-start"
+                    } gap-1.5`}>
                 <div
                   className={`max-w-[80%] rounded-2xl px-3 py-2 leading-relaxed ${isFullscreen ? "text-sm px-4 py-2.5" : "text-[11px]"
                     } ${msg.sender === "farmer"

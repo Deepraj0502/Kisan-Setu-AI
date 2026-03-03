@@ -27,6 +27,7 @@ import {
 } from "./services/geospatialService";
 import { runGeospatialMonitoringJob } from "./services/geospatialMonitoringJob";
 import { RealtimeDataService } from "./services/realtimeDataService";
+import { translateDistrictToEnglish } from "./utils/districtTranslation";
 import "dotenv/config";
 
 const app = express();
@@ -613,9 +614,10 @@ async function fetchRealtimeDataForQuery(
   try {
     // Fetch weather data if relevant
     if (isWeatherQuery && profile?.district) {
-      // Get approximate coordinates for district (you can enhance this with a geocoding service)
-      const coordinates = getDistrictCoordinates(profile.district.toLowerCase());
-      // console.log("cord",coordinates);
+      // Translate district name to English if needed
+      const englishDistrict = translateDistrictToEnglish(profile.district);
+      const coordinates = getDistrictCoordinates(englishDistrict);
+      console.log("District:", profile.district, "→", englishDistrict, "→ Coordinates:", coordinates);
       
       if (coordinates) {
         const weather = await realtimeDataService.getWeather(
