@@ -631,19 +631,51 @@ async function fetchRealtimeDataForQuery(
     }
 
     // Fetch market prices if relevant
-    if (isMarketQuery && profile?.state && profile?.primary_crops) {
-      // Get prices for farmer's primary crops
-      const crop = profile.primary_crops[0]; // Use first crop
-      if (crop) {
+    if (isMarketQuery && profile?.state) {
+      // Try to extract commodity from query
+      let commodity = null;
+      
+      // Check if user has primary crops in profile
+      if (profile.primary_crops && profile.primary_crops.length > 0) {
+        commodity = profile.primary_crops[0];
+      }
+      
+      // Try to extract commodity from the question itself
+      const commodityKeywords: Record<string, string[]> = {
+        "onion": ["onion", "कांदा", "प्याज", "kanda", "pyaz"],
+        "tomato": ["tomato", "टोमॅटो", "टमाटर", "tamatar"],
+        "potato": ["potato", "बटाटा", "आलू", "batata", "aloo"],
+        "wheat": ["wheat", "गहू", "गेहूं", "gahu", "gehun"],
+        "rice": ["rice", "तांदूळ", "चावल", "tandul", "chawal"],
+        "cotton": ["cotton", "कापूस", "कपास", "kapus", "kapas"],
+        "soybean": ["soybean", "सोयाबीन", "soyabean"],
+        "sugarcane": ["sugarcane", "ऊस", "गन्ना", "us", "ganna"],
+        "chili": ["chili", "मिरची", "मिर्च", "mirchi", "mirch"],
+        "turmeric": ["turmeric", "हळद", "हल्दी", "halad", "haldi"],
+      };
+      
+      // Check if any commodity is mentioned in the query
+      for (const [crop, keywords] of Object.entries(commodityKeywords)) {
+        if (keywords.some(keyword => lowerQuestion.includes(keyword.toLowerCase()))) {
+          commodity = crop;
+          break;
+        }
+      }
+      
+      if (commodity) {
+        console.log("Market query detected for commodity:", commodity);
         const prices = await realtimeDataService.getMarketPrices(
           profile.state,
-          crop,
+          commodity,
           profile.district
         );
 
         if (prices.length > 0) {
           const priceText = formatMarketPriceContext(prices, language);
           contextParts.push(priceText);
+          console.log("Market prices added to context:", prices.length, "results");
+        } else {
+          console.log("No market prices found for:", commodity, profile.state);
         }
       }
     }
