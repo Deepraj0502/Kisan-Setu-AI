@@ -160,23 +160,127 @@ app.post("/agent/query", async (req, res) => {
         message_kind: "text",
       });
 
+      // Check if user is responding to a missing data request
+      const profileDataResponse = await detectProfileDataResponse(phone_number, trimmedQuestion);
+      
+      if (profileDataResponse) {
+        console.log("User provided missing data:", profileDataResponse.field, "=", profileDataResponse.value);
+        
+        // Update profile with the provided data
+        const updates: any = {};
+        updates[profileDataResponse.field] = profileDataResponse.value;
+        await updateFarmerProfile(phone_number, updates);
+        
+        console.log("Profile updated, now processing original question:", profileDataResponse.originalQuestion);
+        
+        // Get updated profile
+        profile = await getFarmerProfile(phone_number);
+        
+        // Now process the original question with updated profile
+        const realtimeResult = await fetchRealtimeDataForQuery(
+          profileDataResponse.originalQuestion,
+          profile,
+          lang
+        );
+        
+        // Build context-aware query
+        const personalizedContext = await getPersonalizedContext(phone_number);
+        let contextualQuestion = personalizedContext
+          ? `Context: ${personalizedContext}\n\nQuestion: ${profileDataResponse.originalQuestion}`
+          : profileDataResponse.originalQuestion;
+
+        if (realtimeResult.context) {
+          contextualQuestion += `\n\nReal-time data:\n${realtimeResult.context}`;
+        }
+
+        const useRag = process.env.USE_BEDROCK_RAG === "true";
+        let answer: string;
+
+        if (useRag) {
+          try {
+            const ragResult = await performRAGQuery({
+              question: contextualQuestion,
+              language: lang,
+            });
+            answer = ragResult.answer;
+          } catch (error) {
+            console.error("RAG query failed:", error);
+            answer = getMockAnswer(profileDataResponse.originalQuestion, lang);
+          }
+        } else {
+          answer = getMockAnswer(profileDataResponse.originalQuestion, lang);
+        }
+
+        await saveConversation({
+          phone_number,
+          message_type: "agent",
+          message_text: answer,
+          message_kind: "text",
+          metadata: {
+            engine: useRag ? "bedrock-rag" : "mock",
+            has_realtime_data: !!realtimeResult.context,
+            profile_updated: true,
+            updated_field: profileDataResponse.field
+          },
+        });
+
+        return res.json({
+          answer,
+          metadata: {
+            language: lang,
+            engine: useRag ? "bedrock-rag" : "mock",
+            personalized: true,
+            has_realtime_data: !!realtimeResult.context,
+            profile_updated: true,
+            updated_field: profileDataResponse.field
+          },
+        });
+      }
+
       // Get personalized context
       const personalizedContext = await getPersonalizedContext(phone_number);
 
       // Detect query intent and fetch real-time data if needed
-      const realtimeContext = await fetchRealtimeDataForQuery(
+      const realtimeResult = await fetchRealtimeDataForQuery(
         trimmedQuestion,
         profile,
         lang
       );
+
+      // Check if we need to ask for missing profile data
+      if (realtimeResult.missingData) {
+        console.log("Asking user for missing data:", realtimeResult.missingData.field);
+        
+        // Save the question for context
+        await saveConversation({
+          phone_number,
+          message_type: "agent",
+          message_text: realtimeResult.missingData.question,
+          message_kind: "text",
+          metadata: {
+            awaiting_field: realtimeResult.missingData.field,
+            original_question: trimmedQuestion
+          },
+        });
+
+        return res.json({
+          answer: realtimeResult.missingData.question,
+          metadata: {
+            language: lang,
+            engine: "profile-completion",
+            awaiting_field: realtimeResult.missingData.field,
+            original_question: trimmedQuestion
+          },
+        });
+      }
 
       // Build context-aware query with real-time data
       let contextualQuestion = personalizedContext
         ? `Context: ${personalizedContext}\n\nQuestion: ${trimmedQuestion}`
         : trimmedQuestion;
 
-      if (realtimeContext) {
-        contextualQuestion += `\n\nReal-time data:\n${realtimeContext}`;
+      if (realtimeResult.context) {
+        contextualQuestion += `\n\nReal-time data:\n${realtimeResult.context}`;
       }
 
       const useRag = process.env.USE_BEDROCK_RAG === "true";
@@ -200,7 +304,7 @@ app.post("/agent/query", async (req, res) => {
             metadata: {
               engine: "bedrock-rag",
               context_count: ragResult.retrieved_contexts.length,
-              has_realtime_data: !!realtimeContext,
+              has_realtime_data: !!realtimeResult.context,
             },
           });
 
@@ -211,7 +315,7 @@ app.post("/agent/query", async (req, res) => {
               engine: "bedrock-rag",
               context_count: ragResult.retrieved_contexts.length,
               personalized: true,
-              has_realtime_data: !!realtimeContext,
+              has_realtime_data: !!realtimeResult.context,
             },
           });
         } catch (error) {
@@ -235,7 +339,7 @@ app.post("/agent/query", async (req, res) => {
           language: lang,
           engine: useRag ? "mock-fallback" : "mock-knowledge-base",
           personalized: true,
-          has_realtime_data: !!realtimeContext,
+          has_realtime_data: !!realtimeResult.context,
         },
       });
     } catch (error) {
@@ -564,29 +668,118 @@ const realtimeDataService = new RealtimeDataService();
 // ============================================
 
 /**
+ * Check if profile has required data for the query type
+ * Returns missing field info if data is needed
+ */
+function getMissingProfileData(
+  profile: FarmerProfile | null,
+  isWeatherQuery: boolean,
+  isMarketQuery: boolean,
+  language: "mr" | "hi" | "en"
+): { missing: boolean; field: string; question: string } | null {
+  if (!profile) return null;
+
+  const messages = {
+    district: {
+      mr: "तुमचा जिल्हा कोणता आहे? (उदा: पुणे, नाशिक, मुंबई)",
+      hi: "आपका जिला कौन सा है? (उदा: पुणे, नासिक, मुंबई)",
+      en: "Which district are you from? (e.g., Pune, Nashik, Mumbai)"
+    },
+    state: {
+      mr: "तुमचे राज्य कोणते आहे? (उदा: महाराष्ट्र, पंजाब)",
+      hi: "आपका राज्य कौन सा है? (उदा: महाराष्ट्र, पंजाब)",
+      en: "Which state are you from? (e.g., Maharashtra, Punjab)"
+    }
+  };
+
+  // Check for weather query requiring district
+  if (isWeatherQuery && !profile.district) {
+    return {
+      missing: true,
+      field: "district",
+      question: messages.district[language]
+    };
+  }
+
+  // Check for market query requiring state
+  if (isMarketQuery && !profile.state) {
+    return {
+      missing: true,
+      field: "state",
+      question: messages.state[language]
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Check if user is responding to a missing data request
+ * Returns the field and value if detected
+ */
+async function detectProfileDataResponse(
+  phone_number: string,
+  message: string
+): Promise<{ field: string; value: string; originalQuestion: string } | null> {
+  try {
+    // Get last conversation to check if we asked for data
+    const history = await getConversationHistory(phone_number, 2);
+    
+    if (history.length < 1) return null;
+    
+    const lastAgentMessage = history.find(h => h.message_type === 'agent');
+    if (!lastAgentMessage || !lastAgentMessage.metadata) return null;
+    
+    const metadata = lastAgentMessage.metadata as any;
+    if (!metadata.awaiting_field || !metadata.original_question) return null;
+    
+    // User is responding to our question
+    const field = metadata.awaiting_field;
+    const value = message.trim();
+    const originalQuestion = metadata.original_question;
+    
+    console.log("Detected profile data response:", field, "=", value);
+    
+    return { field, value, originalQuestion };
+  } catch (error) {
+    console.error("Error detecting profile data response:", error);
+    return null;
+  }
+}
+
+/**
  * Analyze user query and fetch relevant real-time data
  * Returns formatted context string to include in RAG query
+ * Also returns missing data info if profile is incomplete
  */
 async function fetchRealtimeDataForQuery(
   question: string,
   profile: FarmerProfile | null,
   language: "mr" | "hi" | "en"
-): Promise<string | null> {
+): Promise<{ context: string | null; missingData: { field: string; question: string } | null }> {
   const lowerQuestion = question.toLowerCase();
   const contextParts: string[] = [];
 
   // Weather keywords in multiple languages
   const weatherKeywords = [
-    "weather", "temperature", "rain", "forecast", "climate",
-    "हवामान", "तापमान", "पाऊस", "अंदाज", "वातावरण",
-    "मौसम", "तापमान", "बारिश", "पूर्वानुमान", "जलवायु"
+    // English
+    "weather", "temperature", "rain", "forecast", "climate", "hot", "cold", "humid", "wind", "sunny", "cloudy",
+    // Marathi
+    "हवामान", "तापमान", "पाऊस", "अंदाज", "वातावरण", "गरम", "थंड", "ओलावा", "वारा", "सूर्यप्रकाश", "ढगाळ",
+    "आज", "उद्या", "काल",
+    // Hindi
+    "मौसम", "तापमान", "बारिश", "पूर्वानुमान", "जलवायु", "गर्म", "ठंड", "नमी", "हवा", "धूप", "बादल",
+    "आज", "कल", "परसों"
   ];
 
   // Market price keywords
   const marketKeywords = [
-    "price", "rate", "mandi", "market", "sell", "cost",
-    "भाव", "किंमत", "मंडी", "बाजार", "विक्री",
-    "दाम", "कीमत", "मंडी", "बाजार", "बेचना"
+    // English
+    "price", "rate", "mandi", "market", "sell", "cost", "selling", "buying", "wholesale", "retail",
+    // Marathi
+    "भाव", "किंमत", "मंडी", "बाजार", "विक्री", "खरेदी", "दर",
+    // Hindi
+    "दाम", "कीमत", "मंडी", "बाजार", "बेचना", "खरीदना", "दर"
   ];
 
   // Scheme keywords
@@ -596,24 +789,34 @@ async function fetchRealtimeDataForQuery(
     "योजना", "सब्सिडी", "सरकार", "लाभ"
   ];
 
-  // Check for weather query
+  // Check for weather query (case-insensitive for English, direct match for Devanagari)
   const isWeatherQuery = weatherKeywords.some(keyword => 
-    lowerQuestion.includes(keyword.toLowerCase())
+    lowerQuestion.includes(keyword.toLowerCase()) || question.includes(keyword)
   );
 
   // Check for market price query
   const isMarketQuery = marketKeywords.some(keyword => 
-    lowerQuestion.includes(keyword.toLowerCase())
+    lowerQuestion.includes(keyword.toLowerCase()) || question.includes(keyword)
   );
 
   // Check for scheme query
   const isSchemeQuery = schemeKeywords.some(keyword => 
-    lowerQuestion.includes(keyword.toLowerCase())
+    lowerQuestion.includes(keyword.toLowerCase()) || question.includes(keyword)
   );
+
+  // Check if profile has required data
+  const missingData = getMissingProfileData(profile, isWeatherQuery, isMarketQuery, language);
+  if (missingData) {
+    console.log("Missing profile data detected:", missingData.field);
+    return { context: null, missingData: { field: missingData.field, question: missingData.question } };
+  }
 
   try {
     // Fetch weather data if relevant
     if (isWeatherQuery && profile?.district) {
+      console.log("Weather query detected! Question:", question);
+      console.log("User district:", profile.district);
+      
       // Translate district name to English if needed
       const englishDistrict = translateDistrictToEnglish(profile.district);
       const coordinates = getDistrictCoordinates(englishDistrict);
@@ -625,20 +828,23 @@ async function fetchRealtimeDataForQuery(
           coordinates.longitude
         );
 
+        console.log("Weather data fetched successfully:", weather.location, weather.temperature + "°C");
         const weatherText = formatWeatherContext(weather, language);
         contextParts.push(weatherText);
+      } else {
+        console.log("No coordinates found for district:", englishDistrict);
       }
+    } else if (isWeatherQuery && !profile?.district) {
+      console.log("Weather query detected but no district in profile");
     }
 
     // Fetch market prices if relevant
     if (isMarketQuery && profile?.state) {
+      console.log("Market price query detected! Question:", question);
+      console.log("User state:", profile.state);
+      
       // Try to extract commodity from query
       let commodity = null;
-      
-      // Check if user has primary crops in profile
-      if (profile.primary_crops && profile.primary_crops.length > 0) {
-        commodity = profile.primary_crops[0];
-      }
       
       // Try to extract commodity from the question itself
       const commodityKeywords: Record<string, string[]> = {
@@ -648,22 +854,29 @@ async function fetchRealtimeDataForQuery(
         "wheat": ["wheat", "गहू", "गेहूं", "gahu", "gehun"],
         "rice": ["rice", "तांदूळ", "चावल", "tandul", "chawal"],
         "cotton": ["cotton", "कापूस", "कपास", "kapus", "kapas"],
-        "soybean": ["soybean", "सोयाबीन", "soyabean"],
+        "soybean": ["soybean", "सोयाबीन", "सोयाबीन", "soyabean"],
         "sugarcane": ["sugarcane", "ऊस", "गन्ना", "us", "ganna"],
         "chili": ["chili", "मिरची", "मिर्च", "mirchi", "mirch"],
         "turmeric": ["turmeric", "हळद", "हल्दी", "halad", "haldi"],
       };
       
-      // Check if any commodity is mentioned in the query
+      // Check if any commodity is mentioned in the query (check both lowercase and original)
       for (const [crop, keywords] of Object.entries(commodityKeywords)) {
-        if (keywords.some(keyword => lowerQuestion.includes(keyword.toLowerCase()))) {
+        if (keywords.some(keyword => lowerQuestion.includes(keyword.toLowerCase()) || question.includes(keyword))) {
           commodity = crop;
+          console.log("Commodity extracted from query:", commodity);
           break;
         }
       }
       
+      // Fallback to user's primary crops if no commodity mentioned
+      if (!commodity && profile.primary_crops && profile.primary_crops.length > 0) {
+        commodity = profile.primary_crops[0];
+        console.log("Using primary crop from profile:", commodity);
+      }
+      
       if (commodity) {
-        console.log("Market query detected for commodity:", commodity);
+        console.log("Fetching market prices for:", commodity, profile.state);
         const prices = await realtimeDataService.getMarketPrices(
           profile.state,
           commodity,
@@ -677,7 +890,11 @@ async function fetchRealtimeDataForQuery(
         } else {
           console.log("No market prices found for:", commodity, profile.state);
         }
+      } else {
+        console.log("No commodity detected in query and no primary crops in profile");
       }
+    } else if (isMarketQuery && !profile?.state) {
+      console.log("Market query detected but no state in profile");
     }
 
     // Fetch schemes if relevant
@@ -693,10 +910,10 @@ async function fetchRealtimeDataForQuery(
       }
     }
 
-    return contextParts.length > 0 ? contextParts.join("\n\n") : null;
+    return { context: contextParts.length > 0 ? contextParts.join("\n\n") : null, missingData: null };
   } catch (error) {
     console.error("Error fetching real-time data:", error);
-    return null;
+    return { context: null, missingData: null };
   }
 }
 
@@ -992,6 +1209,38 @@ function getDistrictCoordinates(district: string): { latitude: number; longitude
 }
 
 /**
+ * Translate weather description to regional language
+ */
+function translateWeatherDescription(description: string, language: "mr" | "hi" | "en"): string {
+  if (language === "en") return description;
+  
+  const translations: Record<string, Record<string, string>> = {
+    "clear sky": { mr: "निरभ्र आकाश", hi: "साफ आकाश" },
+    "mainly clear": { mr: "मुख्यतः स्वच्छ", hi: "मुख्य रूप से साफ" },
+    "partly cloudy": { mr: "अंशतः ढगाळ", hi: "आंशिक रूप से बादल" },
+    "overcast": { mr: "ढगाळ", hi: "बादल छाए" },
+    "foggy": { mr: "धुके", hi: "कोहरा" },
+    "light drizzle": { mr: "हलकी रिमझिम", hi: "हल्की बूंदाबांदी" },
+    "moderate drizzle": { mr: "मध्यम रिमझिम", hi: "मध्यम बूंदाबांदी" },
+    "light rain": { mr: "हलका पाऊस", hi: "हल्की बारिश" },
+    "moderate rain": { mr: "मध्यम पाऊस", hi: "मध्यम बारिश" },
+    "heavy rain": { mr: "मुसळधार पाऊस", hi: "भारी बारिश" },
+    "thunderstorm": { mr: "वादळी पाऊस", hi: "आंधी तूफान" },
+    "sunny": { mr: "सूर्यप्रकाश", hi: "धूप" },
+    "rain showers": { mr: "पावसाचे सरी", hi: "बारिश की बौछारें" }
+  };
+  
+  const lowerDesc = description.toLowerCase();
+  for (const [eng, trans] of Object.entries(translations)) {
+    if (lowerDesc.includes(eng)) {
+      return trans[language] || description;
+    }
+  }
+  
+  return description;
+}
+
+/**
  * Format weather data for context
  */
 function formatWeatherContext(weather: any, language: "mr" | "hi" | "en"): string {
@@ -1001,21 +1250,24 @@ function formatWeatherContext(weather: any, language: "mr" | "hi" | "en"): strin
       temp: "तापमान",
       humidity: "आर्द्रता",
       wind: "वारा",
-      forecast: "पुढील 3 दिवसांचा अंदाज"
+      forecast: "पुढील 3 दिवसांचा अंदाज",
+      description: "स्थिती"
     },
     hi: {
       current: "वर्तमान मौसम",
       temp: "तापमान",
       humidity: "आर्द्रता",
       wind: "हवा",
-      forecast: "अगले 3 दिनों का पूर्वानुमान"
+      forecast: "अगले 3 दिनों का पूर्वानुमान",
+      description: "स्थिति"
     },
     en: {
       current: "Current Weather",
       temp: "Temperature",
       humidity: "Humidity",
       wind: "Wind",
-      forecast: "3-Day Forecast"
+      forecast: "3-Day Forecast",
+      description: "Condition"
     }
   };
 
@@ -1024,14 +1276,56 @@ function formatWeatherContext(weather: any, language: "mr" | "hi" | "en"): strin
   let text = `${l.current} (${weather.location}):\n`;
   text += `${l.temp}: ${weather.temperature}°C, ${l.humidity}: ${weather.humidity}%, ${l.wind}: ${weather.wind_speed} km/h\n`;
   
+  // Add weather description if available
+  if (weather.description) {
+    const translatedDesc = translateWeatherDescription(weather.description, language);
+    text += `${l.description}: ${translatedDesc}\n`;
+  }
+  
   if (weather.forecast_3day && weather.forecast_3day.length > 0) {
     text += `\n${l.forecast}:\n`;
     weather.forecast_3day.forEach((day: any) => {
-      text += `${day.date}: ${day.temp_min}°C - ${day.temp_max}°C, ${day.description}\n`;
+      const translatedDesc = translateWeatherDescription(day.description, language);
+      text += `${day.date}: ${day.temp_min}°C - ${day.temp_max}°C, ${translatedDesc}\n`;
     });
   }
 
   return text;
+}
+
+/**
+ * Translate commodity name to regional language
+ */
+function translateCommodityName(commodity: string, language: "mr" | "hi" | "en"): string {
+  if (language === "en") return commodity;
+  
+  const translations: Record<string, Record<string, string>> = {
+    "onion": { mr: "कांदा", hi: "प्याज" },
+    "tomato": { mr: "टोमॅटो", hi: "टमाटर" },
+    "potato": { mr: "बटाटा", hi: "आलू" },
+    "wheat": { mr: "गहू", hi: "गेहूं" },
+    "rice": { mr: "तांदूळ", hi: "चावल" },
+    "cotton": { mr: "कापूस", hi: "कपास" },
+    "soybean": { mr: "सोयाबीन", hi: "सोयाबीन" },
+    "sugarcane": { mr: "ऊस", hi: "गन्ना" },
+    "chili": { mr: "मिरची", hi: "मिर्च" },
+    "turmeric": { mr: "हळद", hi: "हल्दी" },
+    "maize": { mr: "मका", hi: "मक्का" },
+    "groundnut": { mr: "शेंगदाणा", hi: "मूंगफली" },
+    "chickpea": { mr: "हरभरा", hi: "चना" },
+    "pigeon pea": { mr: "तूर", hi: "अरहर" },
+    "green gram": { mr: "मूग", hi: "मूंग" },
+    "black gram": { mr: "उडीद", hi: "उड़द" }
+  };
+  
+  const lowerCommodity = commodity.toLowerCase();
+  for (const [eng, trans] of Object.entries(translations)) {
+    if (lowerCommodity.includes(eng)) {
+      return trans[language] || commodity;
+    }
+  }
+  
+  return commodity;
 }
 
 /**
@@ -1042,17 +1336,29 @@ function formatMarketPriceContext(prices: any[], language: "mr" | "hi" | "en"): 
     mr: {
       title: "बाजार भाव",
       market: "मंडी",
-      price: "भाव"
+      price: "भाव",
+      min: "किमान",
+      max: "कमाल",
+      modal: "सामान्य",
+      perQuintal: "प्रति क्विंटल"
     },
     hi: {
       title: "बाजार दाम",
       market: "मंडी",
-      price: "दाम"
+      price: "दाम",
+      min: "न्यूनतम",
+      max: "अधिकतम",
+      modal: "सामान्य",
+      perQuintal: "प्रति क्विंटल"
     },
     en: {
       title: "Market Prices",
       market: "Market",
-      price: "Price"
+      price: "Price",
+      min: "Min",
+      max: "Max",
+      modal: "Modal",
+      perQuintal: "per quintal"
     }
   };
 
@@ -1060,7 +1366,13 @@ function formatMarketPriceContext(prices: any[], language: "mr" | "hi" | "en"): 
   
   let text = `${l.title}:\n`;
   prices.slice(0, 3).forEach((price: any) => {
-    text += `${l.market}: ${price.market}, ${price.commodity}: ₹${price.modal_price}/${price.unit}\n`;
+    const translatedCommodity = translateCommodityName(price.commodity, language);
+    text += `${l.market}: ${price.market}\n`;
+    text += `${translatedCommodity}: ₹${price.modal_price} ${l.perQuintal}\n`;
+    if (price.min_price && price.max_price) {
+      text += `(${l.min}: ₹${price.min_price}, ${l.max}: ₹${price.max_price})\n`;
+    }
+    text += `\n`;
   });
 
   return text;

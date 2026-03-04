@@ -339,15 +339,26 @@ This project is part of a hackathon submission for AI for Rural Innovation & Sus
 
 ## 📞 Support
 
-- GitHub Issues: [Repository Issues](https://github.com/your-org/kisan-setu-ai/issues)
-- Email: support@kisansetu.ai
-- Documentation: [Wiki](https://github.com/your-org/kisan-setu-ai/wiki)
+- **GitHub Repository**: https://github.com/Deepraj0502/Kisan-Setu-AI
+- **Live Demo**: https://main.d29xa6wbhq5k45.amplifyapp.com
+- **Backend API**: https://kisan-setu-ai.duckdns.org
+- **Email**: pagaredeepraj05@gmail.com
 
 ---
 
 **Built with ❤️ for Indian farmers by Team Forge**
 
 **Last Updated:** March 3, 2026 | **Version:** 1.1.0
+
+---
+
+## 📋 Code Review Ready
+
+This project is ready for code review. Please see:
+- **[CODE_REVIEW_CHECKLIST.md](CODE_REVIEW_CHECKLIST.md)** - Pre-review checklist
+- **[CODE_REVIEW_GUIDE.md](CODE_REVIEW_GUIDE.md)** - Reviewer's guide
+- **[MERMAID_DIAGRAMS.md](MERMAID_DIAGRAMS.md)** - Architecture diagrams
+- **[HACKATHON_PPT_SLIDES.md](HACKATHON_PPT_SLIDES.md)** - Presentation content
 
 
 ---

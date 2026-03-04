@@ -16,6 +16,9 @@
     "test:geospatial": "ts-node test-geospatial.ts",
     "test:realtime": "ts-node test-realtime-data.ts",
     "test:chatbot-integration": "ts-node test-chatbot-integration.ts",
+    "test:weather-regional": "ts-node test-weather-regional.ts",
+    "test:market-price-regional": "ts-node test-market-price-regional.ts",
+    "test:missing-data-flow": "ts-node test-missing-data-flow.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {
