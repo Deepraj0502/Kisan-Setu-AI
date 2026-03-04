@@ -777,17 +777,22 @@ export function WhatsAppSimulator({ variant = "embedded" }: WhatsAppSimulatorPro
     } catch (err) {
       console.error("Speech recognition start failed:", err);
       setIsRecording(false);
-      const errText =
-        language === "mr"
-          ? "मायक्रोफोन सुरू करण्यात समस्या आली. कृपया ब्राउझरची परवानगी तपासा किंवा नंतर पुन्हा प्रयत्न करा."
-          : language === "hi"
-            ? "माइक्रोफोन शुरू करने में समस्या आई। कृपया ब्राउज़र की परमिशन जांचें या बाद में पुनः प्रयास करें।"
-            : "There was a problem starting the microphone. Please check browser permissions or try again later.";
-      addMessage({
-        sender: "agent",
-        text: errText,
-        kind: "text",
-      });
+      // Error message will be shown by onerror handler if it's a real error
+      // Only show message here if it's a synchronous error
+      const error = err as any;
+      if (error && error.message && !error.message.includes("already started")) {
+        const errText =
+          language === "mr"
+            ? "मायक्रोफोन सुरू करण्यात समस्या आली. कृपया ब्राउझरची परवानगी तपासा किंवा नंतर पुन्हा प्रयत्न करा."
+            : language === "hi"
+              ? "माइक्रोफोन शुरू करने में समस्या आई। कृपया ब्राउज़र की परमिशन जांचें या बाद में पुनः प्रयास करें।"
+              : "There was a problem starting the microphone. Please check browser permissions or try again later.";
+        addMessage({
+          sender: "agent",
+          text: errText,
+          kind: "text",
+        });
+      }
     }
   }
 
@@ -1924,8 +1929,25 @@ export function WhatsAppSimulator({ variant = "embedded" }: WhatsAppSimulatorPro
         }
       };
 
-      rec.onerror = () => {
+      rec.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
         setIsRecording(false);
+        
+        // Only show error message for actual errors, not for "no-speech" or "aborted"
+        if (event.error && event.error !== "no-speech" && event.error !== "aborted") {
+          const errText =
+            language === "mr"
+              ? "मायक्रोफोन सुरू करण्यात समस्या आली. कृपया ब्राउझरची परवानगी तपासा किंवा नंतर पुन्हा प्रयत्न करा."
+              : language === "hi"
+                ? "माइक्रोफोन शुरू करने में समस्या आई। कृपया ब्राउज़र की परमिशन जांचें या बाद में पुनः प्रयास करें।"
+                : "There was a problem starting the microphone. Please check browser permissions or try again later.";
+          
+          addMessage({
+            sender: "agent",
+            text: errText,
+            kind: "text",
+          });
+        }
       };
 
       rec.onend = () => {
